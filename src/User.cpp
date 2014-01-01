@@ -100,7 +100,7 @@ CUser::CUser(const CString& sUserName)
 	m_sTimestampFormat = "[%H:%M:%S]";
 	m_bAppendTimestamp = false;
 	m_bPrependTimestamp = true;
-	m_uMaxNetworks = 1;
+	m_uMaxNetworks = 10;
 	m_pUserTimer = new CUserTimer(this);
 	CZNC::Get().GetManager().AddCron(m_pUserTimer);
 }

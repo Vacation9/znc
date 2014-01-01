@@ -217,7 +217,7 @@ public:
 		sArg = WebSock.GetParam("nick"); if (!sArg.empty()) { pNewUser->SetNick(sArg); }
 		sArg = WebSock.GetParam("altnick"); if (!sArg.empty()) { pNewUser->SetAltNick(sArg); }
 		sArg = WebSock.GetParam("statusprefix"); if (!sArg.empty()) { pNewUser->SetStatusPrefix(sArg); }
-		sArg = WebSock.GetParam("ident"); if (!sArg.empty()) { pNewUser->SetIdent(sArg); }
+		sArg = WebSock.GetParam("nick"); if (!sArg.empty()) { pNewUser->SetIdent(sArg); }
 		sArg = WebSock.GetParam("realname"); if (!sArg.empty()) { pNewUser->SetRealName(sArg); }
 		sArg = WebSock.GetParam("quitmsg"); if (!sArg.empty()) { pNewUser->SetQuitMsg(sArg); }
 		sArg = WebSock.GetParam("chanmodes"); if (!sArg.empty()) { pNewUser->SetDefaultChanModes(sArg); }
@@ -786,7 +786,7 @@ public:
 
 				Tmpl["Nick"] = pNetwork->GetNick();
 				Tmpl["AltNick"] = pNetwork->GetAltNick();
-				Tmpl["Ident"] = pNetwork->GetIdent();
+				// Tmpl["Ident"] = pNetwork->GetIdent();
 				Tmpl["RealName"] = pNetwork->GetRealName();
 
 				Tmpl["FloodProtection"] = CString(CIRCSock::IsFloodProtected(pNetwork->GetFloodRate()));
@@ -873,7 +873,7 @@ public:
 
 		pNetwork->SetNick(WebSock.GetParam("nick"));
 		pNetwork->SetAltNick(WebSock.GetParam("altnick"));
-		pNetwork->SetIdent(WebSock.GetParam("ident"));
+		pNetwork->SetIdent(pUser->GetNick());
 		pNetwork->SetRealName(WebSock.GetParam("realname"));
 
 		pNetwork->SetIRCConnectEnabled(WebSock.GetParam("doconnect").ToBool());
@@ -1073,7 +1073,7 @@ public:
 				Tmpl["Nick"] = pUser->GetNick();
 				Tmpl["AltNick"] = pUser->GetAltNick();
 				Tmpl["StatusPrefix"] = pUser->GetStatusPrefix();
-				Tmpl["Ident"] = pUser->GetIdent();
+				// Tmpl["Ident"] = pUser->GetIdent();
 				Tmpl["RealName"] = pUser->GetRealName();
 				Tmpl["QuitMsg"] = pUser->GetQuitMsg();
 				Tmpl["DefaultChanModes"] = pUser->GetDefaultChanModes();

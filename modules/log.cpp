@@ -300,11 +300,11 @@ CModule::EModRet CLogMod::OnChanMsg(CNick& Nick, CChan& Channel, CString& sMessa
 }
 
 template<> void TModInfo<CLogMod>(CModInfo& Info) {
-	Info.AddType(CModInfo::NetworkModule);
-	Info.AddType(CModInfo::GlobalModule);
+	// Info.AddType(CModInfo::NetworkModule);
+	// Info.AddType(CModInfo::GlobalModule);
 	Info.SetHasArgs(true);
 	Info.SetArgsHelpText("[-sanitize] Optional path where to store logs.");
 	Info.SetWikiPage("log");
 }
 
-USERMODULEDEFS(CLogMod, "Write IRC logs")
+GLOBALMODULEDEFS(CLogMod, "Write IRC logs")
