@@ -84,7 +84,7 @@ void CLogMod::PutLog(const CString& sLine, const CString& sWindow /*= "Status"*/
 
 	// $WINDOW has to be handled last, since it can contain %
 	sPath.Replace("$NETWORK", (m_pNetwork ? m_pNetwork->GetName() : "znc"));
-	sPath.Replace("$WINDOW", sWindow.Replace_n("/", "-").Replace_n("\\", "-"));
+	sPath.Replace("$WINDOW", sWindow.Replace_n("/", "-").Replace_n("\\", "-").MakeLower());
 	sPath.Replace("$USER", (m_pUser ? m_pUser->GetUserName() : "UNKNOWN"));
 
 	// Check if it's allowed to write in this specific path
@@ -162,7 +162,7 @@ bool CLogMod::OnLoad(const CString& sArgs, CString& sMessage)
 			if (!m_sLogPath.empty()) {
 				m_sLogPath += "/";
 			}
-			m_sLogPath += "$USER_$NETWORK_$WINDOW_%Y%m%d.log";
+			m_sLogPath += "$USER_$NETWORK_$WINDOW.log";
 		}
 	}
 
