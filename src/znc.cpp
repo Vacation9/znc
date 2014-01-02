@@ -912,7 +912,7 @@ bool CZNC::WriteNewConfig(const CString& sConfigFile) {
 
 		if (bFileOK) {
 			File.SetFileName(m_sConfigFile);
-			if (File.Open(O_WRONLY | O_CREAT | O_TRUNC, 0600)) {
+			if (File.Open(O_WRONLY | O_CREAT | O_TRUNC, 0640)) {
 				bFileOpen = true;
 			} else {
 				CUtils::PrintStatus(false, "Unable to open file");
