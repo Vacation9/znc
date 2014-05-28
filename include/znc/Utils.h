@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -82,7 +82,11 @@ public:
 
 	static CString CTime(time_t t, const CString& sTZ);
 	static CString FormatTime(time_t t, const CString& sFormat, const CString& sTZ);
+	static CString FormatServerTime(const timeval& tv);
 	static SCString GetTimezones();
+
+	static MCString GetMessageTags(const CString& sLine);
+	static void SetMessageTags(CString& sLine, const MCString& mssTags);
 
 private:
 protected:
@@ -312,7 +316,7 @@ public:
 	 * @return true if item existed and was removed, false if it never existed
 	 */
 	bool RemItem(const K& Item) {
-		return m_mItems.erase(Item);
+		return (m_mItems.erase(Item) != 0);
 	}
 
 	/**

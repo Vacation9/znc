@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,13 +53,13 @@ public:
 	virtual void OnIRCConnectionError(CIRCSock *pIRCSock);
 	virtual EModRet OnIRCRegistration(CString& sPass, CString& sNick, CString& sIdent, CString& sRealName);
 	virtual EModRet OnBroadcast(CString& sMessage);
-	virtual void OnChanPermission(const CNick& OpNick, const CNick& Nick, CChan& Channel, unsigned char uMode, bool bAdded, bool bNoChange);
-	virtual void OnOp(const CNick& OpNick, const CNick& Nick, CChan& Channel, bool bNoChange);
-	virtual void OnDeop(const CNick& OpNick, const CNick& Nick, CChan& Channel, bool bNoChange);
-	virtual void OnVoice(const CNick& OpNick, const CNick& Nick, CChan& Channel, bool bNoChange);
-	virtual void OnDevoice(const CNick& OpNick, const CNick& Nick, CChan& Channel, bool bNoChange);
-	virtual void OnMode(const CNick& OpNick, CChan& Channel, char uMode, const CString& sArg, bool bAdded, bool bNoChange);
-	virtual void OnRawMode(const CNick& OpNick, CChan& Channel, const CString& sModes, const CString& sArgs);
+	virtual void OnChanPermission2(const CNick* pOpNick, const CNick& Nick, CChan& Channel, unsigned char uMode, bool bAdded, bool bNoChange);
+	virtual void OnOp2(const CNick* pOpNick, const CNick& Nick, CChan& Channel, bool bNoChange);
+	virtual void OnDeop2(const CNick* pOpNick, const CNick& Nick, CChan& Channel, bool bNoChange);
+	virtual void OnVoice2(const CNick* pOpNick, const CNick& Nick, CChan& Channel, bool bNoChange);
+	virtual void OnDevoice2(const CNick* pOpNick, const CNick& Nick, CChan& Channel, bool bNoChange);
+	virtual void OnMode2(const CNick* pOpNick, CChan& Channel, char uMode, const CString& sArg, bool bAdded, bool bNoChange);
+	virtual void OnRawMode2(const CNick* pOpNick, CChan& Channel, const CString& sModes, const CString& sArgs);
 	virtual EModRet OnRaw(CString& sLine);
 	virtual EModRet OnStatusCommand(CString& sCommand);
 	virtual void OnModCommand(const CString& sCommand);
@@ -102,6 +102,8 @@ public:
 	virtual bool OnEmbeddedWebRequest(CWebSock&, const CString&, CTemplate&);
 	virtual EModRet OnAddNetwork(CIRCNetwork& Network, CString& sErrorRet);
 	virtual EModRet OnDeleteNetwork(CIRCNetwork& Network);
+	virtual EModRet OnSendToClient(CString& sLine, CClient& Client);
+	virtual EModRet OnSendToIRC(CString& sLine);
 };
 
 static inline CPerlModule* AsPerlModule(CModule* p) {
@@ -163,6 +165,13 @@ inline bool HaveIPv6() {
 
 inline bool HaveSSL() {
 #ifdef HAVE_LIBSSL
+	return true;
+#endif
+	return false;
+}
+
+inline bool HaveCharset() {
+#ifdef HAVE_ICU
 	return true;
 #endif
 	return false;

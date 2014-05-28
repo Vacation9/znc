@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -274,9 +274,18 @@ bool CUtils::GetInput(const CString& sPrompt, CString& sRet, const CString& sDef
 	return !sRet.empty();
 }
 
+#define BOLD "\033[1m"
+#define NORM "\033[22m"
+
+#define RED "\033[31m"
+#define GRN "\033[32m"
+#define YEL "\033[33m"
+#define BLU "\033[34m"
+#define DFL "\033[39m"
+
 void CUtils::PrintError(const CString& sMessage) {
 	if (CDebug::StdoutIsTTY())
-		fprintf(stdout, "\033[1m\033[34m[\033[31m ** \033[34m]\033[39m\033[22m %s\n", sMessage.c_str());
+		fprintf(stdout, BOLD BLU "[" RED " ** " BLU "]" DFL NORM" %s\n", sMessage.c_str());
 	else
 		fprintf(stdout, "%s\n", sMessage.c_str());
 	fflush(stdout);
@@ -284,7 +293,7 @@ void CUtils::PrintError(const CString& sMessage) {
 
 void CUtils::PrintPrompt(const CString& sMessage) {
 	if (CDebug::StdoutIsTTY())
-		fprintf(stdout, "\033[1m\033[34m[\033[33m ?? \033[34m]\033[39m\033[22m %s: ", sMessage.c_str());
+		fprintf(stdout, BOLD BLU "[" YEL " ?? " BLU "]" DFL NORM " %s: ", sMessage.c_str());
 	else
 		fprintf(stdout, "[ ?? ] %s: ", sMessage.c_str());
 	fflush(stdout);
@@ -293,10 +302,10 @@ void CUtils::PrintPrompt(const CString& sMessage) {
 void CUtils::PrintMessage(const CString& sMessage, bool bStrong) {
 	if (CDebug::StdoutIsTTY()) {
 		if (bStrong)
-			fprintf(stdout, "\033[1m\033[34m[\033[33m ** \033[34m]\033[39m\033[22m \033[1m%s\033[22m\n",
+			fprintf(stdout, BOLD BLU "[" YEL " ** " BLU "]" DFL BOLD "%s" NORM "\n",
 					sMessage.c_str());
 		else
-			fprintf(stdout, "\033[1m\033[34m[\033[33m ** \033[34m]\033[39m\033[22m %s\n",
+			fprintf(stdout, BOLD BLU "[" YEL " ** " BLU "]" DFL NORM " %s\n",
 					sMessage.c_str());
 	} else
 		fprintf(stdout, "%s\n", sMessage.c_str());
@@ -306,7 +315,7 @@ void CUtils::PrintMessage(const CString& sMessage, bool bStrong) {
 
 void CUtils::PrintAction(const CString& sMessage) {
 	if (CDebug::StdoutIsTTY())
-		fprintf(stdout, "\033[1m\033[34m[\033[32m    \033[34m]\033[39m\033[22m %s... ", sMessage.c_str());
+		fprintf(stdout, BOLD BLU "[ .. " BLU "]" DFL NORM " %s...\n", sMessage.c_str());
 	else
 		fprintf(stdout, "%s... ", sMessage.c_str());
 	fflush(stdout);
@@ -314,21 +323,12 @@ void CUtils::PrintAction(const CString& sMessage) {
 
 void CUtils::PrintStatus(bool bSuccess, const CString& sMessage) {
 	if (CDebug::StdoutIsTTY()) {
-		if (!sMessage.empty()) {
-			if (bSuccess) {
-				fprintf(stdout, "%s", sMessage.c_str());
-			} else {
-				fprintf(stdout, "\033[1m\033[34m[\033[31m %s \033[34m]"
-						"\033[39m\033[22m", sMessage.c_str());
-			}
-		}
-
-		fprintf(stdout, "\r");
-
 		if (bSuccess) {
-			fprintf(stdout, "\033[1m\033[34m[\033[32m ok \033[34m]\033[39m\033[22m\n");
+			fprintf(stdout,  BOLD BLU "[" GRN " >> " BLU "]" DFL NORM);
+			fprintf(stdout, " %s\n", sMessage.empty() ? "ok" : sMessage.c_str());
 		} else {
-			fprintf(stdout, "\033[1m\033[34m[\033[31m !! \033[34m]\033[39m\033[22m\n");
+			fprintf(stdout,  BOLD BLU "[" RED " !! " BLU "]" DFL NORM);
+			fprintf(stdout,  BOLD RED " %s" DFL NORM "\n", sMessage.empty() ? "failed" : sMessage.c_str());
 		}
 	} else {
 		if (bSuccess) {
@@ -428,6 +428,22 @@ CString CUtils::FormatTime(time_t t, const CString& sFormat, const CString& sTim
 	return s;
 }
 
+CString CUtils::FormatServerTime(const timeval& tv) {
+	CString s_msec(tv.tv_usec / 1000);
+	while (s_msec.length() < 3) {
+		s_msec = "0" + s_msec;
+	}
+	// TODO support leap seconds properly
+	// TODO support message-tags properly
+	struct tm stm;
+	memset(&stm, 0, sizeof(stm));
+	const time_t secs = tv.tv_sec; // OpenBSD has tv_sec as int, so explicitly convert it to time_t to make gmtime_r() happy
+	gmtime_r(&secs, &stm);
+	char sTime[20] = {};
+	strftime(sTime, sizeof(sTime), "%Y-%m-%dT%H:%M:%S", &stm);
+	return CString(sTime) + "." + s_msec + "Z";
+}
+
 namespace {
 	void FillTimezones(const CString& sPath, SCString& result, const CString& sPrefix) {
 		CDir Dir;
@@ -452,9 +468,42 @@ namespace {
 }
 
 SCString CUtils::GetTimezones() {
-	SCString result;
-	FillTimezones("/usr/share/zoneinfo", result, "");
+	static SCString result;
+	if (result.empty()) {
+		FillTimezones("/usr/share/zoneinfo", result, "");
+	}
 	return result;
+}
+
+MCString CUtils::GetMessageTags(const CString& sLine) {
+	if (sLine.StartsWith("@")) {
+		VCString vsTags;
+		sLine.Token(0).TrimPrefix_n("@").Split(";", vsTags, false);
+
+		MCString mssTags;
+		for (VCString::const_iterator it = vsTags.begin(); it != vsTags.end(); ++it) {
+			mssTags[it->Token(0, false, "=", true)] = it->Token(1, true, "=", true);
+		}
+		return mssTags;
+	}
+	return MCString::EmptyMap;
+}
+
+void CUtils::SetMessageTags(CString& sLine, const MCString& mssTags) {
+	if (sLine.StartsWith("@")) {
+		sLine.LeftChomp(sLine.Token(0).length() + 1);
+	}
+
+	if (!mssTags.empty()) {
+		CString sTags;
+		for (MCString::const_iterator it = mssTags.begin(); it != mssTags.end(); ++it) {
+			if (!sTags.empty()) {
+				sTags += ";";
+			}
+			sTags += it->first + "=" + it->second;
+		}
+		sLine = "@" + sTags + " " + sLine;
+	}
 }
 
 bool CTable::AddColumn(const CString& sName) {

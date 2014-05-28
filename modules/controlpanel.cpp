@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  * Copyright (C) 2008 by Stefan Rado
  * based on admin.cpp by Sebastian Ramacher
  * based on admin.cpp in crox branch
@@ -75,7 +75,10 @@ class CAdminMod : public CModule {
 			{"PrependTimestamp",    boolean},
 			{"TimestampFormat",     str},
 			{"DCCBindHost",         str},
-			{"StatusPrefix",        str}
+			{"StatusPrefix",        str},
+#ifdef HAVE_ICU
+			{"ClientEncoding",      str},
+#endif
 		};
 		for (unsigned int i = 0; i != ARRAY_SIZE(vars); ++i) {
 			VarTable.AddRow();
@@ -94,8 +97,12 @@ class CAdminMod : public CModule {
 			{"Altnick",             str},
 			{"Ident",               str},
 			{"RealName",            str},
+			{"BindHost",            str},
 			{"FloodRate",           doublenum},
 			{"FloodBurst",          integer},
+#ifdef HAVE_ICU
+			{"Encoding",            str},
+#endif
 		};
 		for (unsigned int i = 0; i != ARRAY_SIZE(nvars); ++i) {
 			NVarTable.AddRow();
@@ -207,6 +214,10 @@ class CAdminMod : public CModule {
 			PutModule("Admin = " + CString(pUser->IsAdmin()));
 		else if (sVar == "statusprefix")
 			PutModule("StatusPrefix = " + pUser->GetStatusPrefix());
+#ifdef HAVE_ICU
+		else if (sVar == "clientencoding")
+			PutModule("ClientEncoding = " + pUser->GetClientEncoding());
+#endif
 		else
 			PutModule("Error: Unknown variable");
 	}
@@ -243,6 +254,29 @@ class CAdminMod : public CModule {
 		}
 		else if (sVar == "bindhost") {
 			if(!pUser->DenySetBindHost() || m_pUser->IsAdmin()) {
+				if (sValue.Equals(m_pUser->GetBindHost())) {
+					PutModule("This bind host is already set!");
+					return;
+				}
+
+				const VCString& vsHosts = CZNC::Get().GetBindHosts();
+				if (!m_pUser->IsAdmin() && !vsHosts.empty()) {
+					VCString::const_iterator it;
+					bool bFound = false;
+
+					for (it = vsHosts.begin(); it != vsHosts.end(); ++it) {
+						if (sValue.Equals(*it)) {
+							bFound = true;
+							break;
+						}
+					}
+
+					if (!bFound) {
+						PutModule("You may not use this bind host. See /msg " + m_pUser->GetStatusPrefix() + "status ListBindHosts for a list");
+						return;
+					}
+				}
+
 				pUser->SetBindHost(sValue);
 				PutModule("BindHost = " + sValue);
 			} else {
@@ -368,6 +402,12 @@ class CAdminMod : public CModule {
 				PutModule("That would be a bad idea!");
 			}
 		}
+#ifdef HAVE_ICU
+		else if (sVar == "clientencoding") {
+			pUser->SetClientEncoding(sValue);
+			PutModule("ClientEncoding = " + sValue);
+		}
+#endif
 		else
 			PutModule("Error: Unknown variable");
 	}
@@ -409,10 +449,16 @@ class CAdminMod : public CModule {
 			PutModule("Ident = " + pNetwork->GetIdent());
 		} else if (sVar.Equals("realname")) {
 			PutModule("RealName = " + pNetwork->GetRealName());
+		} else if (sVar.Equals("bindhost")) {
+			PutModule("BindHost = " + pNetwork->GetBindHost());
 		} else if (sVar.Equals("floodrate")) {
 			PutModule("FloodRate = " + CString(pNetwork->GetFloodRate()));
 		} else if (sVar.Equals("floodburst")) {
 			PutModule("FloodBurst = " + CString(pNetwork->GetFloodBurst()));
+#ifdef HAVE_ICU
+		} else if (sVar.Equals("encoding")) {
+			PutModule("Encoding = " + pNetwork->GetEncoding());
+#endif
 		} else {
 			PutModule("Error: Unknown variable");
 		}
@@ -460,15 +506,114 @@ class CAdminMod : public CModule {
 		} else if (sVar.Equals("realname")) {
 			pNetwork->SetRealName(sValue);
 			PutModule("RealName = " + pNetwork->GetRealName());
+		} else if (sVar.Equals("bindhost")) {
+			if(!pUser->DenySetBindHost() || m_pUser->IsAdmin()) {
+				if (sValue.Equals(pNetwork->GetBindHost())) {
+					PutModule("This bind host is already set!");
+					return;
+				}
+
+				const VCString& vsHosts = CZNC::Get().GetBindHosts();
+				if (!m_pUser->IsAdmin() && !vsHosts.empty()) {
+					VCString::const_iterator it;
+					bool bFound = false;
+
+					for (it = vsHosts.begin(); it != vsHosts.end(); ++it) {
+						if (sValue.Equals(*it)) {
+							bFound = true;
+							break;
+						}
+					}
+
+					if (!bFound) {
+						PutModule("You may not use this bind host. See /msg " + m_pUser->GetStatusPrefix() + "status ListBindHosts for a list");
+						return;
+					}
+				}
+
+				pNetwork->SetBindHost(sValue);
+				PutModule("BindHost = " + sValue);
+			} else {
+				PutModule("Access denied!");
+			}
 		} else if (sVar.Equals("floodrate")) {
 			pNetwork->SetFloodRate(sValue.ToDouble());
 			PutModule("FloodRate = " + CString(pNetwork->GetFloodRate()));
 		} else if (sVar.Equals("floodburst")) {
 			pNetwork->SetFloodBurst(sValue.ToUShort());
 			PutModule("FloodBurst = " + CString(pNetwork->GetFloodBurst()));
+#ifdef HAVE_ICU
+		} else if (sVar.Equals("encoding")) {
+			pNetwork->SetEncoding(sValue);
+			PutModule("Encoding = " + pNetwork->GetEncoding());
+#endif
 		} else {
 			PutModule("Error: Unknown variable");
 		}
+	}
+	
+	void AddChan(const CString& sLine) {
+		const CString sUsername   = sLine.Token(1);
+		const CString sNetwork    = sLine.Token(2);
+		const CString sChan       = sLine.Token(3);
+		
+		if (sChan.empty()) {
+			PutModule("Usage: addchan <username> <network> <channel>");
+			return;
+		}
+		
+		CUser* pUser = GetUser(sUsername);
+		if (!pUser)
+			return;
+				
+		CIRCNetwork* pNetwork = pUser->FindNetwork(sNetwork);
+		if (!pNetwork) {
+			PutModule("Error: [" + sUsername + "] does not have a network named [" + sNetwork + "].");
+			return;
+		}
+		
+		if (pNetwork->FindChan(sChan)) {
+			PutModule("Error: [" + sUsername + "] already has a channel named [" + sChan + "].");
+			return;
+		}
+		
+		CChan* pChan = new CChan(sChan, pNetwork, true);
+		if (pNetwork->AddChan(pChan))
+			PutModule("Channel [" + pChan->GetName() + "] for user [" + sUsername + "] added.");
+		else
+			PutModule("Could not add channel [" + sChan + "] for user [" + sUsername + "], does it already exist?");
+	}
+	
+	void DelChan(const CString& sLine) {
+		const CString sUsername   = sLine.Token(1);
+		const CString sNetwork    = sLine.Token(2);
+		const CString sChan       = sLine.Token(3);
+		
+		if (sChan.empty()) {
+			PutModule("Usage: delchan <username> <network> <channel>");
+			return;
+		}
+		
+		CUser* pUser = GetUser(sUsername);
+		if (!pUser)
+			return;
+		
+		CIRCNetwork* pNetwork = pUser->FindNetwork(sNetwork);
+		if (!pNetwork) {
+			PutModule("Error: [" + sUsername + "] does not have a network named [" + sNetwork + "].");
+			return;
+		}
+		
+		CChan* pChan = pNetwork->FindChan(sChan);
+		if (!pChan) {
+			PutModule("Error: User [" + sUsername + "] does not have a channel named [" + sChan + "].");
+			return;
+		}
+		
+		pNetwork->DelChan(sChan);
+		pNetwork->PutIRC("PART " + sChan);
+		
+		PutModule("Channel [" + sChan + "] for user [" + sUsername + "] deleted.");
 	}
 
 	void GetChan(const CString& sLine) {
@@ -1200,6 +1345,10 @@ public:
 			"variable [username] network chan",     "Prints the variable's value for the given channel");
 		AddCommand("SetChan",      static_cast<CModCommand::ModCmdFunc>(&CAdminMod::SetChan),
 			"variable username network chan value", "Sets the variable's value for the given channel");
+		AddCommand("AddChan",      static_cast<CModCommand::ModCmdFunc>(&CAdminMod::AddChan),
+			"username network chan",                "Adds a new channel");
+		AddCommand("DelChan",      static_cast<CModCommand::ModCmdFunc>(&CAdminMod::DelChan),
+			"username network chan",                "Deletes a channel");
 		AddCommand("ListUsers",    static_cast<CModCommand::ModCmdFunc>(&CAdminMod::ListUsers),
 			"",                                     "Lists users");
 		AddCommand("AddUser",      static_cast<CModCommand::ModCmdFunc>(&CAdminMod::AddUser),

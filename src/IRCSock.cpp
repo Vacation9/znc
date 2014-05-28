@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,6 +65,7 @@ CIRCSock::CIRCSock(CIRCNetwork* pNetwork) : CZNCSock() {
 	EnableReadLine();
 	m_Nick.SetIdent(m_pNetwork->GetIdent());
 	m_Nick.SetHost(m_pNetwork->GetBindHost());
+	SetEncoding(m_pNetwork->GetEncoding());
 
 	m_uMaxNickLen = 9;
 	m_uCapPaused = 0;
@@ -1039,8 +1040,13 @@ void CIRCSock::TrySend() {
 	// This condition must be the same as in PutIRC() and PutIRCQuick()!
 	while (!m_vsSendQueue.empty() && (!m_bFloodProtection || m_iSendsAllowed > 0)) {
 		m_iSendsAllowed--;
-		DEBUG("(" << m_pNetwork->GetUser()->GetUserName() << "/" << m_pNetwork->GetName() << ") ZNC -> IRC [" << m_vsSendQueue.front() << "]");
-		Write(m_vsSendQueue.front() + "\r\n");
+		bool bSkip = false;
+		CString& sLine = m_vsSendQueue.front();
+		ALLMODULECALL(OnSendToIRC(sLine), &bSkip);
+		if (!bSkip) {;
+			DEBUG("(" << m_pNetwork->GetUser()->GetUserName() << "/" << m_pNetwork->GetName() << ") ZNC -> IRC [" << sLine << "]");
+			Write(sLine + "\r\n");
+		}
 		m_vsSendQueue.pop_front();
 	}
 }

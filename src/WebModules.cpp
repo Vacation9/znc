@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 #include <znc/User.h>
 #include <znc/IRCNetwork.h>
 #include <znc/znc.h>
+#include <algorithm>
 #include <sstream>
 
 using std::pair;
@@ -97,6 +98,11 @@ bool CZNCTagHandler::HandleTag(CTemplate& Tmpl, const CString& sName, const CStr
 CWebSession::CWebSession(const CString& sId, const CString& sIP) : m_sId(sId), m_sIP(sIP) {
 	m_pUser = NULL;
 	Sessions.m_mIPSessions.insert(make_pair(sIP, this));
+	UpdateLastActive();
+}
+
+void CWebSession::UpdateLastActive() {
+	time(&m_tmLastActive);
 }
 
 bool CWebSession::IsAdmin() const { return IsLoggedIn() && m_pUser->IsAdmin(); }
@@ -179,7 +185,7 @@ void CWebAuth::Invalidate() {
 	m_pWebSock = NULL;
 }
 
-CWebSock::CWebSock() : CHTTPSock(NULL) {
+CWebSock::CWebSock(const CString& sURIPrefix) : CHTTPSock(NULL, sURIPrefix) {
 	m_bPathsSet = false;
 
 	m_Template.AddTagHandler(new CZNCTagHandler(*this));
@@ -319,6 +325,7 @@ void CWebSock::SetVars() {
 	m_Template["Version"] = CZNC::GetVersion();
 	m_Template["SkinName"] = GetSkinName();
 	m_Template["_CSRF_Check"] = GetCSRFCheck();
+	m_Template["URIPrefix"] = GetURIPrefix();
 
 	if (GetSession()->IsAdmin()) {
 		m_Template["IsAdmin"] = "true";
@@ -467,6 +474,7 @@ CWebSock::EPageReqResult CWebSock::PrintStaticFile(const CString& sPath, CString
 
 CWebSock::EPageReqResult CWebSock::PrintTemplate(const CString& sPageName, CString& sPageRet, CModule* pModule) {
 	SetVars();
+
 	m_Template["PageName"] = sPageName;
 
 	if (pModule) {
@@ -807,6 +815,10 @@ void CWebSock::PrintErrorPage(const CString& sMessage) {
 	m_Template["Error"] = sMessage;
 }
 
+static inline bool compareLastActive(const std::pair<const CString, CWebSession *> &first, const std::pair<const CString, CWebSession *> &second) {
+	return first.second->GetLastActive() < second.second->GetLastActive();
+}
+
 CSmartPtr<CWebSession> CWebSock::GetSession() {
 	if (!m_spSession.IsNull()) {
 		return m_spSession;
@@ -818,13 +830,16 @@ CSmartPtr<CWebSession> CWebSock::GetSession() {
 	if (pSession != NULL) {
 		// Refresh the timeout
 		Sessions.m_mspSessions.AddItem((*pSession)->GetId(), *pSession);
+		(*pSession)->UpdateLastActive();
 		m_spSession = *pSession;
-		DEBUG("Found existing session from cookie: [" + sCookieSessionId + "] IsLoggedIn(" + CString((*pSession)->IsLoggedIn() ? "true" : "false") + ")");
+		DEBUG("Found existing session from cookie: [" + sCookieSessionId + "] IsLoggedIn(" + CString((*pSession)->IsLoggedIn() ? "true, " + ((*pSession)->GetUser()->GetUserName()) : "false") + ")");
 		return *pSession;
 	}
 
 	if (Sessions.m_mIPSessions.count(GetRemoteIP()) > m_uiMaxSessions) {
-		mIPSessionsIterator it = Sessions.m_mIPSessions.find(GetRemoteIP());
+		pair<mIPSessionsIterator, mIPSessionsIterator> p =
+			Sessions.m_mIPSessions.equal_range(GetRemoteIP());
+		mIPSessionsIterator it = std::min_element(p.first, p.second, compareLastActive);
 		DEBUG("Remote IP:   " << GetRemoteIP() << "; discarding session [" << it->second->GetId() << "]");
 		Sessions.m_mspSessions.RemItem(it->second->GetId());
 	}

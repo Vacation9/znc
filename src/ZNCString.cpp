@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -65,21 +65,21 @@ unsigned char* CString::strnchr(const unsigned char* src, unsigned char c, unsig
 	return NULL;
 }
 
-int CString::CaseCmp(const CString& s, unsigned long uLen) const {
+int CString::CaseCmp(const CString& s, CString::size_type uLen) const {
 	if (uLen != CString::npos) {
 		return strncasecmp(c_str(), s.c_str(), uLen);
 	}
 	return strcasecmp(c_str(), s.c_str());
 }
 
-int CString::StrCmp(const CString& s, unsigned long uLen) const {
+int CString::StrCmp(const CString& s, CString::size_type uLen) const {
 	if (uLen != CString::npos) {
 		return strncmp(c_str(), s.c_str(), uLen);
 	}
 	return strcmp(c_str(), s.c_str());
 }
 
-bool CString::Equals(const CString& s, bool bCaseSensitive, unsigned long uLen) const {
+bool CString::Equals(const CString& s, bool bCaseSensitive, CString::size_type uLen) const {
 	if (bCaseSensitive) {
 		return (StrCmp(s, uLen) == 0);
 	} else {
@@ -1090,6 +1090,14 @@ bool CString::TrimSuffix(const CString& sSuffix) {
 	} else {
 		return false;
 	}
+}
+
+bool CString::StartsWith(const CString& sPrefix) const {
+	return Left(sPrefix.length()).Equals(sPrefix);
+}
+
+bool CString::EndsWith(const CString& sSuffix) const {
+	return Right(sSuffix.length()).Equals(sSuffix);
 }
 
 
