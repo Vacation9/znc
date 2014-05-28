@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -56,7 +56,7 @@ public:
 	CString ExpandConfigPath(const CString& sConfigFile, bool bAllowMkDir = true);
 	bool WriteNewConfig(const CString& sConfigFile);
 	bool WriteConfig();
-	bool ParseConfig(const CString& sConfig);
+	bool ParseConfig(const CString& sConfig, CString& sError);
 	bool RehashConfig(CString& sError);
 	void BackupConfigOnce(const CString& sSuffix);
 	static CString GetVersion();
@@ -131,7 +131,9 @@ public:
 	// !Getters
 
 	// Static allocator
+	static void CreateInstance();
 	static CZNC& Get();
+	static void DestroyInstance();
 	CUser* FindUser(const CString& sUsername);
 	CModule* FindModule(const CString& sModName, const CString& sUsername);
 	CModule* FindModule(const CString& sModName, CUser* pUser);
@@ -152,7 +154,8 @@ public:
 	// Listener yummy
 	CListener* FindListener(u_short uPort, const CString& BindHost, EAddrType eAddr);
 	bool AddListener(CListener*);
-	bool AddListener(unsigned short uPort, const CString& sBindHost, bool bSSL,
+	bool AddListener(unsigned short uPort, const CString& sBindHost,
+			const CString& sURIPrefix, bool bSSL,
 			EAddrType eAddr, CListener::EAcceptType eAccept, CString& sError);
 	bool DelListener(CListener*);
 
@@ -163,8 +166,8 @@ public:
 	const VCString& GetMotd() const { return m_vsMotd; }
 	// !MOTD
 
-	void AddServerThrottle(CString sName) { m_sConnectThrottle.AddItem(sName); }
-	bool GetServerThrottle(CString sName) { return m_sConnectThrottle.GetItem(sName); }
+	void AddServerThrottle(CString sName) { m_sConnectThrottle.AddItem(sName, true); }
+	bool GetServerThrottle(CString sName) { bool *b = m_sConnectThrottle.GetItem(sName); return (b && *b); }
 
 	void AddNetworkToQueue(CIRCNetwork *pNetwork);
 	std::list<CIRCNetwork*>& GetConnectionQueue() { return m_lpConnectQueue; }

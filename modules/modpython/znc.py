@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+# Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -383,6 +383,12 @@ class Module:
     def OnDeleteNetwork(self, Network):
         pass
 
+    def OnSendToClient(self, sLine, Client):
+        pass
+
+    def OnSendToIRC(self, sLine):
+        pass
+
     # Global modules
     def OnAddUser(self, User, sErrorRet):
         pass
@@ -422,6 +428,29 @@ class Module:
 
     def OnGetAvailableMods(self, ssMods, eType):
         pass
+
+    # In python None is allowed value, so python modules may continue using OnMode and not OnMode2
+    def OnChanPermission2(self, OpNick, Nick, Channel, uMode, bAdded, bNoChange):
+        return self.OnChanPermission(OpNick, Nick, Channel, uMode, bAdded, bNoChange)
+
+    def OnOp2(self, OpNick, Nick, Channel, bNoChange):
+        return self.OnOp(OpNick, Nick, Channel, bNoChange)
+
+    def OnDeop2(self, OpNick, Nick, Channel, bNoChange):
+        return self.OnDeop(OpNick, Nick, Channel, bNoChange)
+
+    def OnVoice2(self, OpNick, Nick, Channel, bNoChange):
+        return self.OnVoice(OpNick, Nick, Channel, bNoChange)
+
+    def OnDevoice2(self, OpNick, Nick, Channel, bNoChange):
+        return self.OnDevoice(OpNick, Nick, Channel, bNoChange)
+
+    def OnMode2(self, OpNick, Channel, uMode, sArg, bAdded, bNoChange):
+        return self.OnMode(OpNick, Channel, uMode, sArg, bAdded, bNoChange)
+
+    def OnRawMode2(self, OpNick, Channel, sModes, sArgs):
+        return self.OnRawMode(OpNick, Channel, sModes, sArgs)
+
 
 def make_inherit(cl, parent, attr):
     def make_caller(parent, name, attr):
@@ -653,6 +682,7 @@ UNLOAD = CModule.UNLOAD
 
 HaveSSL = HaveSSL_()
 HaveIPv6 = HaveIPv6_()
+HaveCharset = HaveCharset_()
 Version = GetVersion()
 VersionMajor = GetVersionMajor()
 VersionMinor = GetVersionMinor()

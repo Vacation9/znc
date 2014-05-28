@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -130,6 +130,12 @@ CString CZNC::GetCompileOptionsString() {
 		"threads"
 #else
 		"blocking"
+#endif
+		", charset: "
+#ifdef HAVE_ICU
+		"yes"
+#else
+		"no"
 #endif
 	;
 }
@@ -362,10 +368,6 @@ CString CZNC::GetUserPath() const {
 CString CZNC::GetModPath() const {
 	CString sModPath = m_sZNCPath + "/modules";
 
-	if (!CFile::Exists(sModPath)) {
-		CDir::MakeDir(sModPath);
-	}
-
 	return sModPath;
 }
 
@@ -448,6 +450,7 @@ bool CZNC::WriteConfig() {
 		CConfig listenerConfig;
 
 		listenerConfig.AddKeyValuePair("Host", pListener->GetBindHost());
+		listenerConfig.AddKeyValuePair("URIPrefix", pListener->GetURIPrefix() + "/");
 		listenerConfig.AddKeyValuePair("Port", CString(pListener->GetPort()));
 
 		listenerConfig.AddKeyValuePair("IPv4", CString(pListener->GetAddrType() != ADDR_IPV6ONLY));
@@ -576,38 +579,36 @@ bool CZNC::WriteNewConfig(const CString& sConfigFile) {
 	bool b6 = false;
 #endif
 	CString sListenHost;
+	CString sURIPrefix;
 	bool bListenSSL = false;
 	unsigned int uListenPort = 0;
 	bool bSuccess;
 
 	do {
 		bSuccess = true;
-		while (!CUtils::GetNumInput("What port would you like ZNC to listen on?", uListenPort, 1025, 65535)) ;
+		while (true) {
+			if (!CUtils::GetNumInput("What port would you like ZNC to listen on?", uListenPort, 1025, 65535)) {
+				continue;
+			}
+			if (uListenPort == 6667 && !CUtils::GetBoolInput("Warning: Some web browsers reject port 6667. If you intend to use ZNC's web interface, you might want to use another port. Proceed with port 6667 anyway?", true)) {
+				continue;
+			}
+			break;
+		}
+
 
 #ifdef HAVE_LIBSSL
-		if (CUtils::GetBoolInput("Would you like ZNC to listen using SSL?", bListenSSL)) {
-			bListenSSL = true;
-
-			CString sPemFile = GetPemLocation();
-			if (!CFile::Exists(sPemFile)) {
-				CUtils::PrintError("Unable to locate pem file: [" + sPemFile + "]");
-				if (CUtils::GetBoolInput("Would you like to create a new pem file now?",
-							true)) {
-					WritePemFile();
-				}
-			}
-		} else
-			bListenSSL = false;
+		bListenSSL = CUtils::GetBoolInput("Would you like ZNC to listen using SSL?", bListenSSL);
 #endif
 
 #ifdef HAVE_IPV6
-		b6 = CUtils::GetBoolInput("Would you like ZNC to listen using ipv6?", b6);
+		b6 = CUtils::GetBoolInput("Would you like ZNC to listen using both IPv4 and IPv6?", b6);
 #endif
 
-		CUtils::GetInput("Listen Host", sListenHost, sListenHost, "Blank for all ips");
+		// Don't ask for listen host, it may be configured later if needed.
 
 		CUtils::PrintAction("Verifying the listener");
-		CListener* pListener = new CListener((unsigned short int)uListenPort, sListenHost, bListenSSL,
+		CListener* pListener = new CListener((unsigned short int)uListenPort, sListenHost, sURIPrefix, bListenSSL,
 				b6 ? ADDR_ALL : ADDR_IPV4ONLY, CListener::ACCEPT_ALL);
 		if (!pListener->Listen()) {
 			CUtils::PrintStatus(false, FormatBindError());
@@ -616,6 +617,14 @@ bool CZNC::WriteNewConfig(const CString& sConfigFile) {
 			CUtils::PrintStatus(true);
 		delete pListener;
 	} while (!bSuccess);
+
+#ifdef HAVE_LIBSSL
+	CString sPemFile = GetPemLocation();
+	if (!CFile::Exists(sPemFile)) {
+		CUtils::PrintMessage("Unable to locate pem file: [" + sPemFile + "], creating it");
+		WritePemFile();
+	}
+#endif
 
 	vsLines.push_back("<Listener l>");
 	vsLines.push_back("\tPort = " + CString(uListenPort));
@@ -1015,13 +1024,11 @@ void CZNC::BackupConfigOnce(const CString& sSuffix) {
 		CUtils::PrintStatus(false, strerror(errno));
 }
 
-bool CZNC::ParseConfig(const CString& sConfig)
+bool CZNC::ParseConfig(const CString& sConfig, CString& sError)
 {
-	CString s;
-
 	m_sConfigFile = ExpandConfigPath(sConfig, false);
 
-	return DoRehash(s);
+	return DoRehash(sError);
 }
 
 bool CZNC::RehashConfig(CString& sError)
@@ -1684,12 +1691,15 @@ bool CZNC::AddListener(const CString& sLine, CString& sError) {
 		bSSL = true;
 	}
 
+	// No support for URIPrefix for old-style configs.
+	CString sURIPrefix;
 	unsigned short uPort = sPort.ToUShort();
-	return AddListener(uPort, sBindHost, bSSL, eAddr, eAccept, sError);
+	return AddListener(uPort, sBindHost, sURIPrefix, bSSL, eAddr, eAccept, sError);
 }
 
-bool CZNC::AddListener(unsigned short uPort, const CString& sBindHost, bool bSSL,
-			EAddrType eAddr, CListener::EAcceptType eAccept, CString& sError) {
+bool CZNC::AddListener(unsigned short uPort, const CString& sBindHost,
+		       const CString& sURIPrefixRaw, bool bSSL,
+		       EAddrType eAddr, CListener::EAcceptType eAccept, CString& sError) {
 	CString sHostComment;
 
 	if (!sBindHost.empty()) {
@@ -1750,7 +1760,18 @@ bool CZNC::AddListener(unsigned short uPort, const CString& sBindHost, bool bSSL
 		return false;
 	}
 
-	CListener* pListener = new CListener(uPort, sBindHost, bSSL, eAddr, eAccept);
+	// URIPrefix must start with a slash and end without one.
+	CString sURIPrefix = CString(sURIPrefixRaw);
+	if(!sURIPrefix.empty()) {
+		if (!sURIPrefix.StartsWith("/")) {
+			sURIPrefix = "/" + sURIPrefix;
+		}
+		if (sURIPrefix.EndsWith("/")) {
+			sURIPrefix.TrimRight("/");
+		}
+	}
+
+	CListener* pListener = new CListener(uPort, sBindHost, sURIPrefix, bSSL, eAddr, eAccept);
 
 	if (!pListener->Listen()) {
 		sError = FormatBindError();
@@ -1767,6 +1788,7 @@ bool CZNC::AddListener(unsigned short uPort, const CString& sBindHost, bool bSSL
 
 bool CZNC::AddListener(CConfig* pConfig, CString& sError) {
 	CString sBindHost;
+	CString sURIPrefix;
 	bool bSSL;
 	bool b4;
 #ifdef HAVE_IPV6
@@ -1788,6 +1810,7 @@ bool CZNC::AddListener(CConfig* pConfig, CString& sError) {
 	pConfig->FindBoolEntry("ipv6", b6, b6);
 	pConfig->FindBoolEntry("allowirc", bIRC, true);
 	pConfig->FindBoolEntry("allowweb", bWeb, true);
+	pConfig->FindStringEntry("uriprefix", sURIPrefix);
 
 	EAddrType eAddr;
 	if (b4 && b6) {
@@ -1815,7 +1838,7 @@ bool CZNC::AddListener(CConfig* pConfig, CString& sError) {
 		return false;
 	}
 
-	return AddListener(uPort, sBindHost, bSSL, eAddr, eAccept, sError);
+	return AddListener(uPort, sBindHost, sURIPrefix, bSSL, eAddr, eAccept, sError);
 }
 
 bool CZNC::AddListener(CListener* pListener) {
@@ -1846,9 +1869,22 @@ bool CZNC::DelListener(CListener* pListener) {
 	return false;
 }
 
+static CZNC* s_pZNC = NULL;
+
+void CZNC::CreateInstance() {
+	if (s_pZNC)
+		abort();
+
+	s_pZNC = new CZNC();
+}
+
 CZNC& CZNC::Get() {
-	static CZNC* pZNC = new CZNC;
-	return *pZNC;
+	return *s_pZNC;
+}
+
+void CZNC::DestroyInstance() {
+	delete s_pZNC;
+	s_pZNC = NULL;
 }
 
 CZNC::TrafficStatsMap CZNC::GetTrafficStats(TrafficStatsPair &Users,
@@ -1973,6 +2009,10 @@ protected:
 };
 
 void CZNC::SetConnectDelay(unsigned int i) {
+	if (i < 1) {
+		// Don't hammer server with our failed connects
+		i = 1;
+	}
 	if (m_uiConnectDelay != i && m_pConnectQueueTimer != NULL) {
 		m_pConnectQueueTimer->Start(i);
 	}
@@ -2020,7 +2060,6 @@ void CZNC::AddNetworkToQueue(CIRCNetwork *pNetwork) {
 			return;
 		}
 	}
-
 
 	m_lpConnectQueue.push_back(pNetwork);
 	EnableConnectQueue();

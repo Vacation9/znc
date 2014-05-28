@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -210,7 +210,7 @@ public:
 		return HALTCORE;
 	}
 
-	virtual void OnOp(const CNick& OpNick, const CNick& Nick, CChan& Channel, bool bNoChange) {
+	virtual void OnOp2(const CNick* pOpNick, const CNick& Nick, CChan& Channel, bool bNoChange) {
 		if (Nick.GetNick() == m_pNetwork->GetIRCNick().GetNick()) {
 			const map<CString,CNick>& msNicks = Channel.GetNicks();
 
@@ -321,19 +321,21 @@ public:
 	bool CheckAutoOp(const CNick& Nick, CChan& Channel) {
 		CAutoOpUser *pUser = FindUserByHost(Nick.GetHostMask(), Channel.GetName());
 
-		if (pUser) {
-			if (pUser->GetUserKey().Equals("__NOKEY__")) {
-				PutIRC("MODE " + Channel.GetName() + " +o " + Nick.GetNick());
-			} else {
-				// then insert this nick into the queue, the timer does the rest
-				CString sNick = Nick.GetNick().AsLower();
-				if (m_msQueue.find(sNick) == m_msQueue.end()) {
-					m_msQueue[sNick] = "";
-				}
+		if (!pUser) {
+			return false;
+		}
+
+		if (pUser->GetUserKey().Equals("__NOKEY__")) {
+			PutIRC("MODE " + Channel.GetName() + " +o " + Nick.GetNick());
+		} else {
+			// then insert this nick into the queue, the timer does the rest
+			CString sNick = Nick.GetNick().AsLower();
+			if (m_msQueue.find(sNick) == m_msQueue.end()) {
+				m_msQueue[sNick] = "";
 			}
 		}
 
-		return pUser;
+		return true;
 	}
 
 	void DelUser(const CString& sUser) {

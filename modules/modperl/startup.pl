@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+# Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -371,6 +371,17 @@ sub OnTimerAutoJoin {}
 sub OnEmbeddedWebRequest {}
 sub OnAddNetwork {}
 sub OnDeleteNetwork {}
+sub OnSendToClient {}
+sub OnSendToIRC {}
+
+# In Perl "undefined" is allowed value, so perl modules may continue using OnMode and not OnMode2
+sub OnChanPermission2 { my $self = shift; $self->OnChanPermission(@_) }
+sub OnOp2 { my $self = shift; $self->OnOp(@_) }
+sub OnDeop2 { my $self = shift; $self->OnDeop(@_) }
+sub OnVoice2 { my $self = shift; $self->OnVoice(@_) }
+sub OnDevoice2 { my $self = shift; $self->OnDevoice(@_) }
+sub OnMode2 { my $self = shift; $self->OnMode(@_) }
+sub OnRawMode2 { my $self = shift; $self->OnRawMode(@_) }
 
 
 # Functions of CModule will be usable from perl modules.

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -42,19 +42,7 @@ CString CBufLine::GetLine(const CClient& Client, const MCString& msParams) const
 	if (Client.HasServerTime()) {
 		msThisParams["text"] = m_sText;
 		CString sStr = CString::NamedFormat(m_sFormat, msThisParams);
-		CString s_msec(m_time.tv_usec / 1000);
-		while (s_msec.length() < 3) {
-			s_msec = "0" + s_msec;
-		}
-		// TODO support leap seconds properly
-		// TODO support message-tags properly
-		struct tm stm;
-		memset(&stm, 0, sizeof(stm));
-		const time_t secs = m_time.tv_sec; // OpenBSD has tv_sec as int, so explicitly convert it to time_t to make gmtime_r() happy
-		gmtime_r(&secs, &stm);
-		char sTime[20] = {};
-		strftime(sTime, sizeof(sTime), "%Y-%m-%dT%H:%M:%S", &stm);
-		return "@time=" + CString(sTime) + "." + s_msec + "Z " + sStr;
+		return "@time=" + CUtils::FormatServerTime(m_time) + " " + sStr;
 	} else {
 		msThisParams["text"] = Client.GetUser()->AddTimestamp(m_time.tv_sec, m_sText);
 		return CString::NamedFormat(m_sFormat, msThisParams);

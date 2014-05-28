@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,6 +19,7 @@
 #include <znc/User.h>
 #include <znc/IRCNetwork.h>
 
+using std::map;
 using std::vector;
 
 #define CALLMOD(MOD, CLIENT, USER, NETWORK, FUNC) {  \
@@ -673,6 +674,7 @@ void CClient::AcceptLogin(CUser& User) {
 	SetTimeout(540, TMO_READ);
 
 	SetSockName("USR::" + m_pUser->GetUserName());
+	SetEncoding(m_pUser->GetClientEncoding());
 
 	if (!m_sNetwork.empty()) {
 		m_pNetwork = m_pUser->FindNetwork(m_sNetwork);
@@ -752,8 +754,12 @@ CString CClient::GetFullName() {
 }
 
 void CClient::PutClient(const CString& sLine) {
-	DEBUG("(" << GetFullName() << ") ZNC -> CLI [" << sLine << "]");
-	Write(sLine + "\r\n");
+	bool bReturn = false;
+	CString sCopy = sLine;
+	ALLMODULECALL(OnSendToClient(sCopy, *this), &bReturn);
+	if (bReturn) return;
+	DEBUG("(" << GetFullName() << ") ZNC -> CLI [" << sCopy << "]");
+	Write(sCopy + "\r\n");
 }
 
 void CClient::PutStatusNotice(const CString& sLine) {
@@ -927,6 +933,6 @@ void CClient::HandleCap(const CString& sLine)
 		}
 		RespondCap("ACK :" + sList.TrimSuffix_n(" "));
 	} else {
-		PutClient(":irc.znc.in 410 " + GetNick() + " :Invalid CAP subcommand");
+		PutClient(":irc.znc.in 410 " + GetNick() + " " + sSubCmd + " :Invalid CAP subcommand");
 	}
 }

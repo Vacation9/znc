@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -101,6 +101,7 @@ public:
 		CString sArgs(sArgStr);
 		CString sPort;
 		CString sListenHost;
+		CString sURIPrefix;
 
 		while (sArgs.Left(1) == "-") {
 			CString sOpt = sArgs.Token(0);
@@ -150,7 +151,7 @@ public:
 		}
 
 		// Now turn that into a listener instance
-		CListener *pListener = new CListener(uPort, sListenHost, bSSL,
+		CListener *pListener = new CListener(uPort, sListenHost, sURIPrefix, bSSL,
 				(!bIPv6 ? ADDR_IPV4ONLY : ADDR_ALL), CListener::ACCEPT_HTTP);
 
 		if (!pListener->Listen()) {
@@ -542,7 +543,7 @@ public:
 				WebSock.PrintErrorPage("Please don't delete yourself, suicide is not the answer!");
 				return true;
 			} else if (CZNC::Get().DeleteUser(sUser)) {
-				WebSock.Redirect("listusers");
+				WebSock.Redirect(GetWebPath() + "listusers");
 				return true;
 			}
 
@@ -667,13 +668,19 @@ public:
 				return true;
 			}
 
-			if (pNetwork->FindChan(sChanName.Token(0))) {
-				WebSock.PrintErrorPage("Channel [" + sChanName.Token(0) + "] already exists");
+			// This could change the channel name and e.g. add a "#" prefix
+			pChan = new CChan(sChanName, pNetwork, true);
+
+			if (pNetwork->FindChan(pChan->GetName())) {
+				WebSock.PrintErrorPage("Channel [" + pChan->GetName() + "] already exists");
+				delete pChan;
 				return true;
 			}
 
-			pChan = new CChan(sChanName, pNetwork, true);
-			pNetwork->AddChan(pChan);
+			if (!pNetwork->AddChan(pChan)) {
+				WebSock.PrintErrorPage("Could not add channel [" + pChan->GetName() + "]");
+				return true;
+			}
 		}
 
 		pChan->SetBufferCount(WebSock.GetParam("buffercount").ToUInt(), spSession->IsAdmin());
@@ -699,7 +706,7 @@ public:
 
 		CTemplate TmplMod;
 		TmplMod["User"] = pUser->GetUserName();
-		TmplMod["ChanName"] = sChanName;
+		TmplMod["ChanName"] = pChan->GetName();
 		TmplMod["WebadminAction"] = "change";
 		FOR_EACH_MODULE(it, pNetwork) {
 			(*it)->OnEmbeddedWebRequest(WebSock, "webadmin/channel", TmplMod);
@@ -710,7 +717,11 @@ public:
 			return true;
 		}
 
-		WebSock.Redirect("editnetwork?user=" + pUser->GetUserName().Escape_n(CString::EURL) + "&network=" + pNetwork->GetName().Escape_n(CString::EURL));
+		if (WebSock.HasParam("submit_return")) {
+			WebSock.Redirect(GetWebPath() + "editnetwork?user=" + pUser->GetUserName().Escape_n(CString::EURL) + "&network=" + pNetwork->GetName().Escape_n(CString::EURL));
+		} else {
+			WebSock.Redirect(GetWebPath() + "editchan?user=" + pUser->GetUserName().Escape_n(CString::EURL) + "&network=" + pNetwork->GetName().Escape_n(CString::EURL) + "&name=" + pChan->GetName().Escape_n(CString::EURL));
+		}
 		return true;
 	}
 
@@ -984,7 +995,11 @@ public:
 			return true;
 		}
 
-		WebSock.Redirect("edituser?user=" + pUser->GetUserName().Escape_n(CString::EURL));
+		if (WebSock.HasParam("submit_return")) {
+			WebSock.Redirect(GetWebPath() + "edituser?user=" + pUser->GetUserName().Escape_n(CString::EURL));
+		} else {
+			WebSock.Redirect(GetWebPath() + "editnetwork?user=" + pUser->GetUserName().Escape_n(CString::EURL) + "&network=" + pNetwork->GetName().Escape_n(CString::EURL));
+		}
 		return true;
 	}
 
@@ -1020,7 +1035,7 @@ public:
 			return true;
 		}
 
-		WebSock.Redirect("edituser?user=" + pUser->GetUserName().Escape_n(CString::EURL));
+		WebSock.Redirect(GetWebPath() + "edituser?user=" + pUser->GetUserName().Escape_n(CString::EURL));
 		return false;
 	}
 
@@ -1040,7 +1055,7 @@ public:
 			return true;
 		}
 
-		WebSock.Redirect("editnetwork?user=" + pNetwork->GetUser()->GetUserName().Escape_n(CString::EURL) + "&network=" + pNetwork->GetName().Escape_n(CString::EURL));
+		WebSock.Redirect(GetWebPath() + "editnetwork?user=" + pNetwork->GetUser()->GetUserName().Escape_n(CString::EURL) + "&network=" + pNetwork->GetName().Escape_n(CString::EURL));
 		return false;
 	}
 
@@ -1319,10 +1334,10 @@ public:
 			return true;
 		}
 
-		if (!spSession->IsAdmin()) {
-			WebSock.Redirect("edituser");
+		if (spSession->IsAdmin() && WebSock.HasParam("submit_return")) {
+			WebSock.Redirect(GetWebPath() + "listusers");
 		} else {
-			WebSock.Redirect("listusers");
+			WebSock.Redirect(GetWebPath() + "edituser?user=" + pUser->GetUserName());
 		}
 
 		/* we don't want the template to be printed while we redirect */
@@ -1420,6 +1435,7 @@ public:
 	bool AddListener(CWebSock& WebSock, CTemplate& Tmpl) {
 		unsigned short uPort = WebSock.GetParam("port").ToUShort();
 		CString sHost = WebSock.GetParam("host");
+		CString sURIPrefix = WebSock.GetParam("uriprefix");
 		if (sHost == "*") sHost = "";
 		bool bSSL = WebSock.GetParam("ssl").ToBool();
 		bool bIPv4 = WebSock.GetParam("ipv4").ToBool();
@@ -1460,7 +1476,7 @@ public:
 		}
 
 		CString sMessage;
-		if (CZNC::Get().AddListener(uPort, sHost, bSSL, eAddr, eAccept, sMessage)) {
+		if (CZNC::Get().AddListener(uPort, sHost, sURIPrefix, bSSL, eAddr, eAccept, sMessage)) {
 			if (!sMessage.empty()) {
 				WebSock.GetSession()->AddSuccess(sMessage);
 			}
@@ -1544,6 +1560,8 @@ public:
 
 				l["IsWeb"] = CString(pListener->GetAcceptType() != CListener::ACCEPT_IRC);
 				l["IsIRC"] = CString(pListener->GetAcceptType() != CListener::ACCEPT_HTTP);
+
+				l["URIPrefix"] = pListener->GetURIPrefix() + "/";
 
 				// simple protection for user from shooting his own foot
 				// TODO check also for hosts/families
@@ -1688,7 +1706,7 @@ public:
 			WebSock.GetSession()->AddError("Settings changed, but config was not written");
 		}
 
-		WebSock.Redirect("settings");
+		WebSock.Redirect(GetWebPath() + "settings");
 		/* we don't want the template to be printed while we redirect */
 		return false;
 	}

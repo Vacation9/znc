@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2004-2013 ZNC, see the NOTICE file for details.
+ * Copyright (C) 2004-2014 ZNC, see the NOTICE file for details.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -308,6 +308,7 @@ void CClient::UserCommand(CString& sLine) {
 		}
 
 		CString sArgs = sLine.Token(1, true);
+		sArgs.Trim();
 		CServer *pServer = NULL;
 
 		if (!sArgs.empty()) {
@@ -1254,10 +1255,10 @@ void CClient::UserCommand(CString& sLine) {
 			return;
 		}
 		m_pNetwork->SetBindHost("");
-		PutStatus("Bind host cleared");
+		PutStatus("Bind host cleared for this network.");
 	} else if (sCommand.Equals("CLEARUSERBINDHOST") && (m_pUser->IsAdmin() || !m_pUser->DenySetBindHost())) {
 		m_pUser->SetBindHost("");
-		PutStatus("Bind host cleared");
+		PutStatus("Bind host cleared for your user.");
 	} else if (sCommand.Equals("SHOWBINDHOST")) {
 		PutStatus("This user's default bind host " + (m_pUser->GetBindHost().empty() ? "not set" : "is [" + m_pUser->GetBindHost() + "]"));
 		if (m_pNetwork) {
@@ -1429,6 +1430,7 @@ void CClient::UserPortCommand(CString& sLine) {
 		Table.AddColumn("SSL");
 		Table.AddColumn("Proto");
 		Table.AddColumn("IRC/Web");
+		Table.AddColumn("URIPrefix");
 
 		vector<CListener*>::const_iterator it;
 		const vector<CListener*>& vpListeners = CZNC::Get().GetListeners();
@@ -1444,6 +1446,7 @@ void CClient::UserPortCommand(CString& sLine) {
 
 			CListener::EAcceptType eAccept = (*it)->GetAcceptType();
 			Table.SetCell("IRC/Web", (eAccept == CListener::ACCEPT_ALL ? "All" : (eAccept == CListener::ACCEPT_IRC ? "IRC" : "Web")));
+			Table.SetCell("URIPrefix", (*it)->GetURIPrefix() + "/");
 		}
 
 		PutStatus(Table);
@@ -1482,12 +1485,13 @@ void CClient::UserPortCommand(CString& sLine) {
 		}
 
 		if (sPort.empty() || sAddr.empty() || sAccept.empty()) {
-			PutStatus("Usage: AddPort <[+]port> <ipv4|ipv6|all> <web|irc|all> [bindhost]");
+			PutStatus("Usage: AddPort <[+]port> <ipv4|ipv6|all> <web|irc|all> [bindhost [uriprefix]]");
 		} else {
 			bool bSSL = (sPort.Left(1).Equals("+"));
 			const CString sBindHost = sLine.Token(4);
+			const CString sURIPrefix = sLine.Token(5);
 
-			CListener* pListener = new CListener(uPort, sBindHost, bSSL, eAddr, eAccept);
+			CListener* pListener = new CListener(uPort, sBindHost, sURIPrefix, bSSL, eAddr, eAccept);
 
 			if (!pListener->Listen()) {
 				delete pListener;

@@ -22,6 +22,7 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <sstream>
 #include <sys/types.h>
 
 #define _SQL(s) CString("'" + CString(s).Escape_n(CString::ESQL) + "'")
@@ -94,7 +95,41 @@ public:
 	CString(const std::string& s) : std::string(s) {}
 	CString(size_t n, char c) : std::string(n, c) {}
 	~CString() {}
-
+	
+	/**
+	 * Casts a CString to another type.  Implemented via std::stringstream, you use this
+	 * for any class that has an operator<<(std::ostream, YourClass).
+	 * @param target The object to cast into. If the cast fails, its state is unspecified.
+	 * @return True if the cast succeeds, and false if it fails.
+	 */
+	template <typename T> bool Convert(T *target) const
+	{
+		std::stringstream ss(*this);
+		ss >> *target;
+		return (bool) ss; // we don't care why it failed, only whether it failed
+	}
+	
+	/**
+	 * Joins a collection of objects together, using 'this' as a delimiter.
+	 * You can pass either pointers to arrays, or iterators to collections.
+	 * @param i_begin An iterator pointing to the beginning of a group of objects.
+	 * @param i_end An iterator pointing past the end of a group of objects.
+	 * @return The joined string
+	 */
+	template <typename Iterator> CString Join(Iterator i_start, const Iterator &i_end) const
+	{
+		if (i_start == i_end) return CString("");
+		std::ostringstream output;
+		output << *i_start;
+		while (true)
+		{
+			++i_start;
+			if (i_start == i_end) return CString(output.str());
+			output << *this;
+			output << *i_start;
+		}
+	}
+	
 	/**
 	 * Compare this string caselessly to some other string.
 	 * @param s The string to compare to.
@@ -102,7 +137,7 @@ public:
 	 * @return An integer less than, equal to, or greater than zero if this
 	 *         string smaller, equal.... to the given string.
 	 */
-	int CaseCmp(const CString& s, unsigned long uLen = CString::npos) const;
+	int CaseCmp(const CString& s, CString::size_type uLen = CString::npos) const;
 	/**
 	 * Compare this string case sensitively to some other string.
 	 * @param s The string to compare to.
@@ -110,7 +145,7 @@ public:
 	 * @return An integer less than, equal to, or greater than zero if this
 	 *         string smaller, equal.... to the given string.
 	 */
-	int StrCmp(const CString& s, unsigned long uLen = CString::npos) const;
+	int StrCmp(const CString& s, CString::size_type uLen = CString::npos) const;
 	/**
 	 * Check if this string is equal to some other string.
 	 * @param s The string to compare to.
@@ -119,7 +154,7 @@ public:
 	 * @param uLen Number of characters to consider.
 	 * @return True if the strings are equal.
 	 */
-	bool Equals(const CString& s, bool bCaseSensitive = false, unsigned long uLen = CString::npos) const;
+	bool Equals(const CString& s, bool bCaseSensitive = false, CString::size_type uLen = CString::npos) const;
 	/**
 	 * Do a wildcard comparision between two strings.
 	 * For example, the following returns true:
@@ -442,6 +477,17 @@ public:
 	 * @return A copy of this string without the prefix.
 	 */
 	CString TrimSuffix_n(const CString& sSuffix) const;
+
+	/** Check whether the string starts with a given prefix.
+	 * @param sPrefix The prefix.
+	 * @return True if the string starts with prefix, false otherwise.
+	 */
+	bool StartsWith(const CString& sPrefix) const;
+	/** Check whether the string ends with a given suffix.
+	 * @param sSuffix The suffix.
+	 * @return True if the string ends with suffix, false otherwise.
+	 */
+	bool EndsWith(const CString& sSuffix) const;
 
 	/** Remove characters from the beginning of this string.
 	 * @param uLen The number of characters to remove.
